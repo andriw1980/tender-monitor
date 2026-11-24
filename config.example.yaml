@@ -1,0 +1,99 @@
+# Salin ke config.yaml lalu sesuaikan. Rahasia (token, password) ambil dari environment: ${NAMA_VAR}
+database: data/tender.db
+
+# ---------- Kata kunci (dikelola tim sales/admin) ----------
+# include kosong = semua pengumuman lolos. Pencocokan: awalan kata, tidak peka huruf besar/kecil.
+keywords:
+  include:
+    - aplikasi
+    - sistem informasi
+    - digitalisasi
+    - software
+    - perangkat lunak
+    - smart city
+    - pengembangan sistem
+    - mobile
+    - portal
+    - transformasi digital
+    - integrasi
+    - pemeliharaan aplikasi
+  exclude:
+    - konstruksi
+    - jalan
+    - jembatan
+    - alat tulis
+
+# ---------- Jadwal (dipakai oleh `loop`; bila pakai cron, abaikan) ----------
+schedule:
+  interval_minutes: 60
+  active_hours: "07-19"      # hanya mengecek jam 07:00-18:59
+  digest_time: "08:00"       # ringkasan harian
+  reminder_days: [3, 1]      # pengingat H-3 dan H-1 sebelum batas pendaftaran
+
+options:
+  notify_on_first_run: false # false = run pertama tiap sumber hanya mencatat baseline (tidak membanjiri notifikasi)
+  max_individual: 8          # lebih dari ini dalam satu siklus -> dikirim sebagai satu pesan rangkuman
+  alert_after_failures: 3    # peringatan "sumber bermasalah" setelah N kali gagal berturut-turut
+
+# ---------- Sumber ----------
+sources:
+  # 1) LPSE (SPSE/INAPROC). `hosts` = kode LPSE seperti pada URL spse.inaproc.id/<kode>
+  #    Tambahkan LPSE instansi target (kementerian, pemda, BUMN).
+  - type: lpse
+    name: lpse
+    hosts: [kemenkeu, jogjakota, jogjaprov, sleman, bantul, kominfo]   # CONTOH - ganti sesuai target
+    jenis: tender          # tender | non_tender
+    limit: 100             # ambil 100 paket terbaru per host
+
+  # 2) Portal yang punya RSS/Atom
+  - type: rss
+    name: contoh-portal-rss
+    url: https://contoh-perusahaan.co.id/procurement/feed.xml
+    agency: PT Contoh
+    enabled: false
+
+  # 3) Portal tanpa RSS: scraper berbasis CSS selector (satu entri per portal)
+  #    Cara menyusun: buka halaman daftar pengumuman -> klik kanan satu baris -> Inspect -> cari selector.
+  #    Uji dengan: python -m tender_monitor check
+  - type: html
+    name: contoh-portal-html
+    url: https://eproc.contoh-bumn.co.id/pengumuman
+    base_url: https://eproc.contoh-bumn.co.id
+    agency: BUMN Contoh
+    item: "table.pengumuman tbody tr"
+    fields:
+      title: "td:nth-child(2) a"
+      link: "td:nth-child(2) a@href"
+      deadline: "td:nth-child(4)"
+      budget: "td:nth-child(3)"
+    # pages: ["https://eproc.contoh-bumn.co.id/pengumuman?page=2"]
+    # filter: false          # tampilkan SEMUA pengumuman dari portal ini (tanpa filter kata kunci)
+    enabled: false
+
+  # 4) Portal yang hanya kirim notifikasi vendor lewat email / butuh login+captcha:
+  #    daftarkan satu mailbox bersama (mis. tender@perusahaan.co.id) ke portal tsb, lalu baca di sini.
+  - type: imap
+    name: email-vendor
+    host: imap.gmail.com
+    user: ${TENDER_MAIL_USER}
+    password: ${TENDER_MAIL_PASSWORD}      # untuk Gmail gunakan App Password
+    from_contains: ["eproc", "procurement", "tender", "pengadaan"]
+    enabled: false
+
+# ---------- Notifikasi (boleh lebih dari satu) ----------
+notifiers:
+  - type: telegram
+    bot_token: ${TELEGRAM_BOT_TOKEN}       # buat bot lewat @BotFather
+    chat_id: ${TELEGRAM_CHAT_ID}           # grup tim admin (tambahkan bot ke grup)
+  - type: email
+    host: smtp.gmail.com
+    port: 587
+    user: ${SMTP_USER}
+    password: ${SMTP_PASSWORD}
+    from: ${SMTP_USER}
+    to: [admin-support@contoh.co.id]
+    enabled: false
+  - type: webhook                          # n8n / Teams / Slack / gateway WhatsApp
+    url: ${WEBHOOK_URL}
+    enabled: false
+  - type: console                          # cetak ke layar (untuk uji coba)
